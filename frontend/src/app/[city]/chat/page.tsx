@@ -2,12 +2,16 @@
 
 import { useParams } from "next/navigation";
 import { MessageCircle, Send } from "lucide-react";
-import { useState } from "react";
+import { useRef, useState } from "react";
+import { postChat } from "@/lib/api";
+import { EventCard } from "@/components/events/event-card";
+import type { Event } from "@/lib/types";
 
 interface Message {
   id: string;
   role: "user" | "assistant";
   content: string;
+  events?: Event[];
 }
 
 export default function ChatPage() {
@@ -17,6 +21,7 @@ export default function ChatPage() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
+  const scrollRef = useRef<HTMLDivElement>(null);
 
   async function handleSend() {
     if (!input.trim() || loading) return;
@@ -28,22 +33,44 @@ export default function ChatPage() {
     };
 
     setMessages((prev) => [...prev, userMessage]);
+    const currentInput = input.trim();
     setInput("");
     setLoading(true);
 
-    // Placeholder response until API is connected
-    setTimeout(() => {
+    try {
+      // Build history from previous messages
+      const history = messages.map((m) => ({
+        role: m.role,
+        content: m.content,
+      }));
+
+      const response = await postChat(city, currentInput, history);
+
       const assistantMessage: Message = {
         id: crypto.randomUUID(),
         role: "assistant",
-        content:
-          "I'm not connected to the backend yet, but soon I'll be able to help you find the best events and activities in " +
-          cityDisplay +
-          "! Check back soon.",
+        content: response.message,
+        events: response.events,
       };
       setMessages((prev) => [...prev, assistantMessage]);
+    } catch (err) {
+      const errorMessage: Message = {
+        id: crypto.randomUUID(),
+        role: "assistant",
+        content:
+          "Sorry, I had trouble connecting. Please try again in a moment.",
+      };
+      setMessages((prev) => [...prev, errorMessage]);
+    } finally {
       setLoading(false);
-    }, 1000);
+      // Scroll to bottom
+      setTimeout(() => {
+        scrollRef.current?.scrollTo({
+          top: scrollRef.current.scrollHeight,
+          behavior: "smooth",
+        });
+      }, 100);
+    }
   }
 
   function handleKeyDown(e: React.KeyboardEvent) {
@@ -54,7 +81,7 @@ export default function ChatPage() {
   }
 
   return (
-    <div className="flex flex-col h-[calc(100vh-8rem)] lg:h-[calc(100vh-4rem)]">
+    <div className="flex flex-col h-[calc(100dvh-8rem)] lg:h-[calc(100dvh-4rem)]">
       {/* Header */}
       <div className="mb-6">
         <h1 className="text-3xl font-bold tracking-tight flex items-center gap-3">
@@ -67,7 +94,7 @@ export default function ChatPage() {
       </div>
 
       {/* Messages Area */}
-      <div className="flex-1 overflow-y-auto space-y-4 mb-4">
+      <div ref={scrollRef} className="flex-1 overflow-y-auto space-y-4 mb-4">
         {messages.length === 0 && (
           <div className="flex-1 flex items-center justify-center h-full">
             <div className="text-center space-y-4">
@@ -104,21 +131,49 @@ export default function ChatPage() {
         )}
 
         {messages.map((message) => (
-          <div
-            key={message.id}
-            className={`flex ${
-              message.role === "user" ? "justify-end" : "justify-start"
-            }`}
-          >
+          <div key={message.id} className="space-y-3">
             <div
-              className={`max-w-[80%] rounded-2xl px-4 py-3 text-sm ${
-                message.role === "user"
-                  ? "bg-primary text-primary-foreground"
-                  : "glass-strong"
+              className={`flex ${
+                message.role === "user" ? "justify-end" : "justify-start"
               }`}
             >
-              {message.content}
+              <div
+                className={`max-w-[80%] rounded-2xl px-4 py-3 text-sm whitespace-pre-wrap ${
+                  message.role === "user"
+                    ? "bg-primary text-primary-foreground"
+                    : "glass-strong"
+                }`}
+              >
+                {message.content}
+              </div>
             </div>
+
+            {/* Show matched events for assistant messages */}
+            {message.role === "assistant" &&
+              message.events &&
+              message.events.length > 0 && (
+                <div className="pl-2">
+                  <p className="text-xs text-muted-foreground mb-2">
+                    Related events:
+                  </p>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    {message.events.slice(0, 4).map((event) => (
+                      <EventCard
+                        key={event.id}
+                        title={event.title}
+                        description={event.description}
+                        imageUrl={event.image_url}
+                        sourceUrl={event.source_url}
+                        date={event.starts_at}
+                        venue={event.venue_name}
+                        neighborhood={event.neighborhood}
+                        priceLevel={event.price_level}
+                        category={event.category_name}
+                      />
+                    ))}
+                  </div>
+                </div>
+              )}
           </div>
         ))}
 

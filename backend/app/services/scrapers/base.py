@@ -4,6 +4,7 @@ Abstract base scraper and shared data structures for all event scrapers.
 
 from __future__ import annotations
 
+import asyncio
 import logging
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
@@ -101,6 +102,9 @@ class BaseScraper(ABC):
                 self.logger.warning(
                     "Attempt %d/%d failed for %s: %s", attempt, retries, url, exc
                 )
+                if attempt < retries:
+                    wait = min(2 ** attempt, 10)
+                    await asyncio.sleep(wait)
 
         raise RuntimeError(
             f"Failed to fetch {url} after {retries} attempts"

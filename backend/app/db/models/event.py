@@ -6,6 +6,7 @@ from sqlalchemy import (
 )
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
+from pgvector.sqlalchemy import Vector
 
 from app.db.base import Base
 
@@ -64,6 +65,9 @@ class Event(Base):
     # Dedup
     content_hash: Mapped[str] = mapped_column(String(64), unique=True, index=True)
     external_id: Mapped[str | None] = mapped_column(String(500), nullable=True)
+
+    # Embedding (for RAG vector search)
+    embedding = mapped_column(Vector(384), nullable=True)
 
     # Status
     status: Mapped[str] = mapped_column(

@@ -2,10 +2,12 @@ from collections import defaultdict
 from datetime import date
 
 from fastapi import APIRouter, Depends, HTTPException
+from fastapi.responses import JSONResponse
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from app.core.cache import cache_get, cache_set
 from app.core.deps import get_db
 from app.db.models.ai_pick import AIPick
 from app.db.models.city import City
@@ -103,10 +105,20 @@ async def _get_picks_for_date(
 async def todays_picks(
     city_slug: str,
     db: AsyncSession = Depends(get_db),
-) -> DailyPicksResponse:
-    city = await _get_city(db, city_slug)
+):
+    # Check cache
     today = date.today()
-    return await _get_picks_for_date(db, city.id, today)
+    cache_key = f"picks:{city_slug}:{today.isoformat()}"
+    cached = await cache_get(cache_key)
+    if cached is not None:
+        return JSONResponse(content=cached)
+
+    city = await _get_city(db, city_slug)
+    result = await _get_picks_for_date(db, city.id, today)
+
+    # Cache for 15 minutes
+    await cache_set(cache_key, result.model_dump(mode="json"), ttl_seconds=900)
+    return result
 
 
 @router.get("/{city_slug}/picks/{pick_date}", response_model=DailyPicksResponse)

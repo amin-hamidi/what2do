@@ -87,6 +87,12 @@ SOURCES = [
         "base_url": None,
         "scraper_class": None,
     },
+    {
+        "name": "sports_schedules",
+        "source_type": "web_scraper",
+        "base_url": None,
+        "scraper_class": None,
+    },
 ]
 
 VENUES = [
@@ -224,7 +230,6 @@ async def main() -> None:
                 db, Venue,
                 defaults=defaults,
                 slug=slug,
-                city_id=city.id,
             )
             venue_map[slug] = venue
             logger.info("Venue '%s': %s", v_data["name"], "created" if created else "exists")

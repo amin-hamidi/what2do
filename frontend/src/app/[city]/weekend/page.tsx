@@ -1,10 +1,89 @@
 "use client";
 
-import { Sparkles, Calendar } from "lucide-react";
+import { Suspense, useEffect, useState } from "react";
+import { useParams } from "next/navigation";
+import { Sparkles, Calendar, ExternalLink } from "lucide-react";
+import { EventFeed } from "@/components/events/event-feed";
+import { EventFilters, type FilterConfig } from "@/components/events/event-filters";
+import { getPicks } from "@/lib/api";
+import type { AIPick } from "@/lib/types";
+
+const TIME_SLOTS = ["Morning", "Afternoon", "Evening"];
+
+const filters: FilterConfig[] = [
+  {
+    key: "tags",
+    label: "Type",
+    options: [
+      { value: "festival", label: "Festivals" },
+      { value: "outdoor", label: "Outdoor" },
+      { value: "family", label: "Family-Friendly" },
+      { value: "food", label: "Food & Drink" },
+      { value: "live-music", label: "Live Music" },
+      { value: "market", label: "Markets" },
+    ],
+  },
+  {
+    key: "price_level",
+    label: "Price",
+    options: [
+      { value: "free", label: "Free" },
+      { value: "$", label: "$" },
+      { value: "$$", label: "$$" },
+      { value: "$$$", label: "$$$" },
+    ],
+  },
+];
+
+function ItinerarySlot({ pick, slot }: { pick?: AIPick; slot: string }) {
+  const event = pick?.event;
+  return (
+    <div className="glass-subtle rounded-lg p-4 space-y-2">
+      <p className="text-xs font-medium text-primary uppercase tracking-wider">
+        {slot}
+      </p>
+      {event ? (
+        <div className="space-y-1">
+          <h4 className="font-semibold text-sm">{event.title}</h4>
+          <p className="text-muted-foreground text-xs">{pick?.ai_blurb}</p>
+          {event.source_url && (
+            <a
+              href={event.source_url}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-1 text-xs text-primary hover:underline"
+            >
+              Details <ExternalLink className="h-3 w-3" />
+            </a>
+          )}
+        </div>
+      ) : (
+        <p className="text-muted-foreground text-sm">
+          No curated pick yet
+        </p>
+      )}
+    </div>
+  );
+}
 
 export default function WeekendPage() {
+  const params = useParams();
+  const city = params.city as string;
+  const [saturdayPicks, setSaturdayPicks] = useState<AIPick[]>([]);
+  const [sundayPicks, setSundayPicks] = useState<AIPick[]>([]);
+
+  useEffect(() => {
+    getPicks(city)
+      .then((data) => {
+        const cats = (data as { categories: Record<string, AIPick[]> }).categories || {};
+        setSaturdayPicks(cats["weekend_saturday"] || []);
+        setSundayPicks(cats["weekend_sunday"] || []);
+      })
+      .catch(() => {});
+  }, [city]);
+
   return (
-    <div className="space-y-8">
+    <div className="space-y-6">
       <div>
         <h1 className="text-3xl font-bold tracking-tight flex items-center gap-3">
           <Sparkles className="h-8 w-8 text-primary" />
@@ -15,7 +94,7 @@ export default function WeekendPage() {
         </p>
       </div>
 
-      {/* Weekend Overview */}
+      {/* AI Itinerary */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         {/* Saturday */}
         <div className="glass-strong rounded-2xl p-6 glow-purple">
@@ -24,18 +103,12 @@ export default function WeekendPage() {
             <h2 className="text-lg font-semibold">Saturday</h2>
           </div>
           <div className="space-y-3">
-            {["Morning", "Afternoon", "Evening"].map((timeSlot) => (
-              <div
-                key={timeSlot}
-                className="glass-subtle rounded-lg p-4 space-y-2"
-              >
-                <p className="text-xs font-medium text-primary uppercase tracking-wider">
-                  {timeSlot}
-                </p>
-                <p className="text-muted-foreground text-sm animate-pulse">
-                  Coming soon...
-                </p>
-              </div>
+            {TIME_SLOTS.map((slot, i) => (
+              <ItinerarySlot
+                key={slot}
+                slot={slot}
+                pick={saturdayPicks[i]}
+              />
             ))}
           </div>
         </div>
@@ -47,39 +120,24 @@ export default function WeekendPage() {
             <h2 className="text-lg font-semibold">Sunday</h2>
           </div>
           <div className="space-y-3">
-            {["Morning", "Afternoon", "Evening"].map((timeSlot) => (
-              <div
-                key={timeSlot}
-                className="glass-subtle rounded-lg p-4 space-y-2"
-              >
-                <p className="text-xs font-medium text-primary uppercase tracking-wider">
-                  {timeSlot}
-                </p>
-                <p className="text-muted-foreground text-sm animate-pulse">
-                  Coming soon...
-                </p>
-              </div>
+            {TIME_SLOTS.map((slot, i) => (
+              <ItinerarySlot
+                key={slot}
+                slot={slot}
+                pick={sundayPicks[i]}
+              />
             ))}
           </div>
         </div>
       </div>
 
-      {/* Weekend Highlights */}
+      {/* Weekend Events Feed */}
       <section>
-        <h2 className="text-lg font-semibold mb-4">Weekend Highlights</h2>
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-          {[1, 2, 3].map((i) => (
-            <div key={i} className="glass rounded-xl p-5 space-y-3">
-              <div className="w-full h-32 rounded-lg bg-gradient-to-br from-primary/10 to-cyan-glow/10 flex items-center justify-center">
-                <Sparkles className="h-6 w-6 text-muted-foreground/30 animate-pulse" />
-              </div>
-              <div className="space-y-2">
-                <div className="h-4 w-3/4 rounded bg-muted animate-pulse" />
-                <div className="h-3 w-1/2 rounded bg-muted animate-pulse" />
-              </div>
-            </div>
-          ))}
-        </div>
+        <h2 className="text-lg font-semibold mb-4">All Weekend Events</h2>
+        <Suspense>
+          <EventFilters filters={filters} />
+          <EventFeed category="weekend" />
+        </Suspense>
       </section>
     </div>
   );

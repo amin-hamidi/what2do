@@ -25,7 +25,7 @@ def _get_sync_session() -> Session:
     return Session(engine)
 
 
-@celery_app.task(name="scrape_all")
+@celery_app.task(name="scrape_all", autoretry_for=(Exception,), retry_backoff=60, max_retries=2)
 def scrape_all_task() -> dict:
     """Run all active scrapers sequentially, logging results."""
     logger.info("Starting scrape_all_task")
@@ -33,7 +33,7 @@ def scrape_all_task() -> dict:
 
     with _get_sync_session() as session:
         sources = session.execute(
-            select(Source).where(Source.is_active.is_(True), Source.source_type == "web_scraper")
+            select(Source).where(Source.is_active.is_(True))
         ).scalars().all()
 
         for source in sources:
@@ -48,7 +48,7 @@ def scrape_all_task() -> dict:
 
 
 @celery_app.task(name="scrape_source")
-def scrape_source_task(source_name: str) -> dict:
+def scrape_source_task(source_name: str, city_slug: str = "dallas") -> dict:
     """Run a single scraper by source name."""
     logger.info("Starting scrape_source_task for %s", source_name)
 
@@ -74,9 +74,17 @@ def _run_single_scraper(session: Session, source: Source) -> dict:
     """Execute a scraper and record results in a SyncLog."""
     start_time = time.time()
 
-    # Create sync log entry
+    # Get scraper and city first
+    scraper_cls = SCRAPER_REGISTRY[source.name]
+    scraper = scraper_cls()
+    city = session.execute(
+        select(City).where(City.slug == scraper.city_slug)
+    ).scalar_one_or_none()
+
+    # Create sync log entry with city_id
     sync_log = SyncLog(
         source_id=source.id,
+        city_id=city.id if city else None,
         action="scrape",
         status="started",
     )
@@ -84,30 +92,34 @@ def _run_single_scraper(session: Session, source: Source) -> dict:
     session.commit()
 
     try:
-        # Run the async scraper from sync context
-        scraper_cls = SCRAPER_REGISTRY[source.name]
-        scraper = scraper_cls()
-        scraped_events = asyncio.run(scraper.scrape())
-
-        # Get city for deduplication
-        city = session.execute(
-            select(City).where(City.slug == scraper.city_slug)
-        ).scalar_one_or_none()
-
         if city is None:
             raise RuntimeError(f"City not found for slug: {scraper.city_slug}")
 
-        # Run dedup & store asynchronously
         from app.services.deduplicator import deduplicate_and_store
-        from app.db.session import async_session
+        from app.services.embedder import embed_events
+        from app.core.config import get_settings
+        from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker, AsyncSession
 
-        async def _dedup():
-            async with async_session() as db:
-                return await deduplicate_and_store(
-                    db, scraped_events, source.id, city.id
-                )
+        async def _scrape_and_dedup():
+            scraped_events = await scraper.scrape()
+            # Create a fresh async engine each time to avoid event loop binding issues
+            _settings = get_settings()
+            _engine = create_async_engine(_settings.ASYNC_DATABASE_URL)
+            _session_factory = async_sessionmaker(_engine, class_=AsyncSession, expire_on_commit=False)
+            try:
+                async with _session_factory() as db:
+                    counts = await deduplicate_and_store(
+                        db, scraped_events, source.id, city.id
+                    )
+                # Embed newly created events in a separate session
+                async with _session_factory() as db:
+                    embedded = await embed_events(db)
+                    counts["embedded"] = embedded
+                return counts
+            finally:
+                await _engine.dispose()
 
-        counts = asyncio.run(_dedup())
+        counts = asyncio.run(_scrape_and_dedup())
 
         # Update sync log
         duration = time.time() - start_time

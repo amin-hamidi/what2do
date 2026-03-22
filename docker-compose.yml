@@ -6,9 +6,9 @@ services:
       context: ./frontend
       dockerfile: ../docker/frontend.Dockerfile
     ports:
-      - "3000:3000"
+      - "3001:3000"
     environment:
-      - NEXT_PUBLIC_API_URL=http://localhost:8000/api/v1
+      - NEXT_PUBLIC_API_URL=http://localhost:8001/api/v1
     volumes:
       - ./frontend/src:/app/src
       - ./frontend/public:/app/public
@@ -20,7 +20,7 @@ services:
       context: ./backend
       dockerfile: ../docker/backend.Dockerfile
     ports:
-      - "8000:8000"
+      - "8001:8000"
     env_file:
       - backend/.env
     volumes:
@@ -40,7 +40,7 @@ services:
       POSTGRES_PASSWORD: what2do
       POSTGRES_DB: what2do
     ports:
-      - "5432:5432"
+      - "5433:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
@@ -52,7 +52,7 @@ services:
   redis:
     image: redis:7-alpine
     ports:
-      - "6379:6379"
+      - "6380:6379"
     volumes:
       - redis_data:/data
 

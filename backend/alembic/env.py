@@ -32,7 +32,7 @@ if config.config_file_name is not None:
 
 # Override sqlalchemy.url with the app setting
 settings = get_settings()
-config.set_main_option("sqlalchemy.url", settings.DATABASE_URL)
+config.set_main_option("sqlalchemy.url", settings.ASYNC_DATABASE_URL)
 
 target_metadata = Base.metadata
 

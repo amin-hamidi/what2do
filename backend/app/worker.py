@@ -93,8 +93,7 @@ def get_sync_engine():
     """Create a sync SQLAlchemy engine for Celery tasks."""
     from sqlalchemy import create_engine
 
-    sync_url = settings.DATABASE_URL.replace("+asyncpg", "+psycopg2")
-    return create_engine(sync_url)
+    return create_engine(settings.SYNC_DATABASE_URL)
 
 
 # Import tasks so Celery discovers them

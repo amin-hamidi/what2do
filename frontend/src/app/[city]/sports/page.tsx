@@ -1,12 +1,46 @@
 "use client";
 
+import { Suspense } from "react";
 import { Trophy } from "lucide-react";
+import { EventFilters, type FilterConfig } from "@/components/events/event-filters";
+import { EventFeed } from "@/components/events/event-feed";
 
-const filters = ["Sport", "Team", "Date", "Price"];
+const filters: FilterConfig[] = [
+  {
+    key: "genre",
+    label: "League",
+    options: [
+      { value: "NBA", label: "NBA (Mavericks)" },
+      { value: "NFL", label: "NFL (Cowboys)" },
+      { value: "NHL", label: "NHL (Stars)" },
+      { value: "MLB", label: "MLB (Rangers)" },
+      { value: "MLS", label: "MLS (FC Dallas)" },
+    ],
+  },
+  {
+    key: "neighborhood",
+    label: "Venue Area",
+    options: [
+      { value: "Victory Park", label: "Victory Park (AAC)" },
+      { value: "Arlington", label: "Arlington (AT&T / Globe Life)" },
+      { value: "Frisco", label: "Frisco (Toyota Stadium)" },
+    ],
+  },
+  {
+    key: "price_level",
+    label: "Price",
+    options: [
+      { value: "$", label: "$" },
+      { value: "$$", label: "$$" },
+      { value: "$$$", label: "$$$" },
+      { value: "$$$$", label: "$$$$" },
+    ],
+  },
+];
 
 export default function SportsPage() {
   return (
-    <div className="space-y-8">
+    <div className="space-y-6">
       <div>
         <h1 className="text-3xl font-bold tracking-tight flex items-center gap-3">
           <Trophy className="h-8 w-8 text-primary" />
@@ -16,41 +50,10 @@ export default function SportsPage() {
           Games, matches, and sporting events in the area
         </p>
       </div>
-
-      {/* Filter Bar */}
-      <div className="glass rounded-xl p-4 flex flex-wrap gap-3">
-        {filters.map((filter) => (
-          <button
-            key={filter}
-            className="px-4 py-2 rounded-lg bg-secondary text-secondary-foreground text-sm font-medium hover:bg-accent hover:text-accent-foreground transition-colors"
-          >
-            {filter}
-          </button>
-        ))}
-      </div>
-
-      {/* Sports Grid */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-        {[1, 2, 3, 4, 5, 6].map((i) => (
-          <div key={i} className="glass rounded-xl p-5 space-y-3">
-            <div className="w-full h-40 rounded-lg bg-gradient-to-br from-primary/10 to-cyan-glow/10 flex items-center justify-center">
-              <Trophy className="h-8 w-8 text-muted-foreground/30" />
-            </div>
-            <div className="space-y-2">
-              <div className="h-4 w-3/4 rounded bg-muted animate-pulse" />
-              <div className="h-3 w-1/2 rounded bg-muted animate-pulse" />
-              <div className="h-3 w-1/3 rounded bg-muted animate-pulse" />
-            </div>
-          </div>
-        ))}
-      </div>
-
-      {/* Load More */}
-      <div className="flex justify-center">
-        <button className="px-6 py-2.5 rounded-xl glass hover:glow-purple transition-all duration-300 text-sm font-medium">
-          Load more
-        </button>
-      </div>
+      <Suspense>
+        <EventFilters filters={filters} />
+        <EventFeed category="sports" />
+      </Suspense>
     </div>
   );
 }

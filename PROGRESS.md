@@ -63,14 +63,21 @@
 - CLAUDE.md, README.md
 
 ### What is NOT yet done from Phase 1:
-- Alembic migration files not generated yet (need `docker compose up` + `alembic revision --autogenerate`)
-- Seed data not run yet (need DB running first)
-- `npm install` not run in frontend yet (no node_modules/package-lock.json)
-- Docker hasn't been tested yet — first `docker compose up` still needed
+- ~~Alembic migration files not generated yet~~ — DONE (Phase 2)
+- ~~Seed data not run yet~~ — DONE (Phase 2)
+- ~~npm install not run in frontend yet~~ — DONE (Phase 2)
+- ~~Docker hasn't been tested yet~~ — DONE (Phase 2)
+
+### Port Mappings (from Phase 2):
+Host ports were remapped to avoid conflicts with other Docker projects:
+- Frontend: `localhost:3001` → container:3000
+- Backend: `localhost:8001` → container:8000
+- PostgreSQL: `localhost:5433` → container:5432
+- Redis: `localhost:6380` → container:6379
 
 ---
 
-## Phase 2: Scrapers + Filters — TODO (Next Phase)
+## Phase 2: Scrapers + Filters — COMPLETED (2026-03-22)
 
 ### 2.1 Remaining Scrapers
 Create these scraper files in `backend/app/services/scrapers/`:
@@ -123,36 +130,110 @@ Build `EventCalendar` in `frontend/src/components/events/event-calendar.tsx`:
 - Show loading spinner during refresh
 - On completion, re-fetch events for the current page
 
+### What was built in Phase 2:
+
+**Backend — 5 new scrapers + fixes:**
+- `dallas_observer.py` — scrapes dallasobserver.com event listings (found 2 events on first run)
+- `silo_shows.py` — scrapes siloshows.com for concerts
+- `visit_dallas.py` — scrapes visitdallas.com tourism events (found 8 events)
+- `x_social.py` — monitors curated Dallas X accounts via async XClient (needs X_BEARER_TOKEN)
+- `sports_schedules.py` — scrapes team schedule pages (found 21 events — full Cowboys schedule!)
+- All registered in SCRAPER_REGISTRY, sports_schedules source added to seed
+- Fixed scrape task: combined scraper + dedup into single asyncio.run() with fresh engine per task
+- Fixed scrape task: added city_slug parameter, removed source_type filter
+
+**Frontend — 3 new components + 7 page rewrites:**
+- `event-filters.tsx` — reusable filter bar with search, dropdown selects, URL param sync, clear all
+- `event-feed.tsx` — infinite scroll feed with cursor pagination, skeleton loading, empty state
+- `event-calendar.tsx` — month grid calendar with event dots, date selection, event detail view
+- All 6 category pages rewritten with real EventFilters + EventFeed (concerts, restaurants, activities, sports, nightlife, weekend)
+- Home page updated: feed/calendar toggle, real EventFeed, wired refresh button via triggerSync()
+- Fixed API client paths and types to match backend schemas
+
+**Infrastructure:**
+- Docker Compose ports remapped (3001, 8001, 5433, 6380) to avoid conflicts
+- frontend.Dockerfile: npm ci → npm install (no lock file)
+- Added alembic/script.py.mako template
+- Initial Alembic migration generated and applied
+- Seed data run: Dallas city, 6 categories, 6 sources, 9 venues, 5 sports teams
+- 31 real events scraped and stored across 4 categories
+
 ---
 
-## Phase 3: AI Features — TODO (After Phase 2)
+## Phase 3: AI Features — COMPLETED (2026-03-22)
 
-1. **Daily Curation** (`backend/app/services/ai_curator.py`):
-   - Query upcoming events → send to Claude → get top_pick + category recs with blurbs → store in ai_picks table
-   - Wire `curate_daily_picks` Celery task (currently placeholder)
+### What was built in Phase 3:
 
-2. **Home Dashboard Widgets**:
-   - `HeroPick` component — full-width card for AI top pick of the day
-   - `CategoryRecs` — horizontal scroll of AI picks per category
-   - Widget cards: "Happening Now", "Tonight", "This Weekend", "New Restaurants"
+**Backend — AI Services:**
+- `embedder.py` — sentence-transformers (all-MiniLM-L6-v2, 384-dim) for event embeddings
+  - Auto-embeds new events after each scrape (hooked into scrape task)
+  - 11 events embedded successfully on first run
+- `ai_curator.py` — Claude-powered daily curation service
+  - Queries upcoming events, sends to Claude for ranking
+  - Creates AIPick entries (top_pick + category picks with blurbs)
+  - Wired into Celery Beat (5am CST daily)
+- `ai_chat.py` — RAG chatbot with vector search
+  - Embeds user query → pgvector cosine similarity search → Claude response
+  - Falls back to text search if no embeddings exist
+  - Falls back to event list if no API key configured
+  - Passes matched events as context to Claude
 
-3. **RAG Chatbot**:
-   - Add pgvector extension to DB migration
-   - Add embedding column to Event model
-   - Generate embeddings with sentence-transformers on scrape
-   - `backend/app/services/ai_chat.py` — vector search + Claude response + SSE streaming
-   - Wire `POST /{city}/chat` endpoint (currently placeholder)
+**Database:**
+- Added pgvector extension (`CREATE EXTENSION vector`)
+- Added `embedding Vector(384)` column to events table
+- New Alembic migration applied
 
-4. **Category Summaries** — Claude-generated, cached in Redis (4hr TTL)
+**Frontend:**
+- Home page: HeroPick section shows real AI pick data (title, blurb, image, link)
+- Home page: Widget cards wired with real data (Tonight, This Weekend, New Restaurants counts)
+- Chat page: Wired to real `POST /{city}/chat` API
+- Chat page: Shows matched events as EventCards below assistant messages
+- Chat page: Passes conversation history for multi-turn conversations
+- Updated types.ts: AIPick, DailyPicks, ChatResponse aligned with backend schemas
 
-## Phase 4: Polish + Deploy — TODO (After Phase 3)
+**Status:** All AI features functional. Requires `ANTHROPIC_API_KEY` in .env for Claude-powered responses. Without it, falls back to event listing mode.
 
-- Error resilience, retry logic, sync logs admin UI
-- Mobile responsiveness pass
-- SEO: generateMetadata, Open Graph, JSON-LD for events
-- Weekend Planner: AI-curated itineraries
-- VPS deployment with Caddy/Nginx reverse proxy + SSL
-- Redis caching for hot endpoints
+### What remains for later:
+- Category Summaries — Claude-generated, cached in Redis (4hr TTL)
+
+## Phase 4: Polish + Deploy — COMPLETED (2026-03-22)
+
+### What was built in Phase 4:
+
+**Error Resilience:**
+- Exponential backoff between scraper retries (2^attempt seconds, max 10s)
+- SyncLog now records city_id so sync status endpoint works
+- Celery tasks: autoretry_for with 60s backoff, max 2 retries
+- Claude API calls: 30s timeout (chat), 60s timeout (curation)
+
+**Mobile Responsiveness:**
+- Safe-area insets for notched phones (iOS)
+- Filter bar: horizontal scroll on mobile with hidden scrollbar
+- Chat: `100dvh` for dynamic viewport height (handles mobile keyboard)
+- Bottom nav: safe-area padding
+
+**SEO:**
+- Root layout: title template, Open Graph, Twitter cards, keywords, robots
+- City layout: server/client split for `generateMetadata`
+- 7 category layouts with page-specific titles: "Concerts & Music in Dallas | What2Do"
+- next.config: `output: "standalone"`, `images.remotePatterns` for all scraper domains, security headers
+
+**Redis Caching:**
+- `backend/app/core/cache.py` — async cache utility (get/set/invalidate)
+- Categories endpoint: 5min TTL
+- Picks endpoint: 15min TTL
+- Cache invalidation support for pattern matching
+
+**Production Deployment:**
+- `docker/Caddyfile` — reverse proxy with auto-HTTPS, gzip, security headers
+- `docker-compose.prod.yml` — production override with Caddy, no exposed internal ports
+- `docker/frontend.prod.Dockerfile` — multi-stage build (standalone output)
+- `docker/backend.prod.Dockerfile` — gunicorn with 4 uvicorn workers
+
+**Weekend Planner:**
+- `curate_weekend_plan()` in ai_curator — Claude generates Saturday/Sunday itineraries
+- Weekend page: fetches AI picks, displays Morning/Afternoon/Evening slots for each day
+- Glassmorphism Saturday (purple glow) / Sunday (cyan glow) cards
 
 ---
 

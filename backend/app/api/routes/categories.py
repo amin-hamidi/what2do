@@ -1,7 +1,9 @@
 from fastapi import APIRouter, Depends, HTTPException
+from fastapi.responses import JSONResponse
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.cache import cache_get, cache_set
 from app.core.deps import get_db
 from app.db.models.category import Category
 from app.db.models.city import City
@@ -15,7 +17,13 @@ router = APIRouter()
 async def list_categories(
     city_slug: str,
     db: AsyncSession = Depends(get_db),
-) -> list[CategoryResponse]:
+):
+    # Check cache
+    cache_key = f"categories:{city_slug}"
+    cached = await cache_get(cache_key)
+    if cached is not None:
+        return JSONResponse(content=cached)
+
     result = await db.execute(select(City).where(City.slug == city_slug))
     city = result.scalar_one_or_none()
     if not city:
@@ -34,7 +42,7 @@ async def list_categories(
     rows = await db.execute(stmt)
     results = rows.all()
 
-    return [
+    data = [
         CategoryResponse(
             id=cat.id,
             slug=cat.slug,
@@ -45,3 +53,7 @@ async def list_categories(
         )
         for cat, count in results
     ]
+
+    # Cache for 5 minutes
+    await cache_set(cache_key, [d.model_dump(mode="json") for d in data], ttl_seconds=300)
+    return data

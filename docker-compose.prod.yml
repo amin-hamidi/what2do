@@ -1,0 +1,59 @@
+services:
+  caddy:
+    image: caddy:2-alpine
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./docker/Caddyfile:/etc/caddy/Caddyfile
+      - caddy_data:/data
+      - caddy_config:/config
+    environment:
+      - DOMAIN=${DOMAIN:-localhost}
+    depends_on:
+      - frontend
+      - backend
+    restart: unless-stopped
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: ../docker/frontend.prod.Dockerfile
+    ports: []
+    environment:
+      - NEXT_PUBLIC_API_URL=${PUBLIC_API_URL:-https://aminhamidi.com/api/v1}
+      - NODE_ENV=production
+    restart: unless-stopped
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: ../docker/backend.prod.Dockerfile
+    ports: []
+    environment:
+      - DEBUG=False
+    restart: unless-stopped
+
+  worker:
+    build:
+      context: ./backend
+      dockerfile: ../docker/backend.prod.Dockerfile
+    command: celery -A app.worker worker --loglevel=warning --concurrency=2
+    restart: unless-stopped
+
+  beat:
+    build:
+      context: ./backend
+      dockerfile: ../docker/backend.prod.Dockerfile
+    command: celery -A app.worker beat --loglevel=warning
+    restart: unless-stopped
+
+  db:
+    restart: unless-stopped
+
+  redis:
+    restart: unless-stopped
+
+volumes:
+  caddy_data:
+  caddy_config:
