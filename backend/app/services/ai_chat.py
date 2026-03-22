@@ -14,7 +14,6 @@ from sqlalchemy.orm import selectinload
 
 from app.core.config import get_settings
 from app.db.models.event import Event
-from app.services.embedder import generate_embedding
 
 logger = logging.getLogger("what2do.ai_chat")
 
@@ -143,6 +142,7 @@ async def _search_events(
 ) -> list[Event]:
     """Search events using pgvector cosine similarity."""
     try:
+        from app.services.embedder import generate_embedding
         query_embedding = generate_embedding(query)
     except Exception:
         logger.exception("Failed to generate query embedding")
