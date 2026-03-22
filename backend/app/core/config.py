@@ -2,6 +2,26 @@ from pydantic_settings import BaseSettings
 from functools import lru_cache
 
 
+def _to_async_url(url: str) -> str:
+    """Convert any postgres URL to asyncpg format."""
+    if url.startswith("postgres://"):
+        return url.replace("postgres://", "postgresql+asyncpg://", 1)
+    if url.startswith("postgresql://"):
+        return url.replace("postgresql://", "postgresql+asyncpg://", 1)
+    return url
+
+
+def _to_sync_url(url: str) -> str:
+    """Convert any postgres URL to psycopg2 format."""
+    if url.startswith("postgresql+asyncpg://"):
+        return url.replace("postgresql+asyncpg://", "postgresql+psycopg2://", 1)
+    if url.startswith("postgres://"):
+        return url.replace("postgres://", "postgresql+psycopg2://", 1)
+    if url.startswith("postgresql://"):
+        return url.replace("postgresql://", "postgresql+psycopg2://", 1)
+    return url
+
+
 class Settings(BaseSettings):
     # App
     APP_NAME: str = "What2Do"
@@ -9,29 +29,8 @@ class Settings(BaseSettings):
     DEBUG: bool = False
     API_V1_PREFIX: str = "/api/v1"
 
-    # Database — accepts any postgres URL format, normalizes for asyncpg
+    # Database
     DATABASE_URL: str = "postgresql+asyncpg://what2do:what2do@localhost:5432/what2do"
-
-    @property
-    def ASYNC_DATABASE_URL(self) -> str:
-        """Ensure the URL uses asyncpg driver."""
-        url = self.DATABASE_URL
-        if url.startswith("postgresql://"):
-            url = url.replace("postgresql://", "postgresql+asyncpg://", 1)
-        elif url.startswith("postgres://"):
-            url = url.replace("postgres://", "postgresql+asyncpg://", 1)
-        return url
-
-    @property
-    def SYNC_DATABASE_URL(self) -> str:
-        """Get a sync-compatible URL using psycopg2."""
-        url = self.DATABASE_URL
-        for prefix in ("postgresql+asyncpg://", "postgres://"):
-            if url.startswith(prefix):
-                url = url.replace(prefix, "postgresql+psycopg2://", 1)
-        if url.startswith("postgresql://"):
-            url = url.replace("postgresql://", "postgresql+psycopg2://", 1)
-        return url
 
     # Anthropic
     ANTHROPIC_API_KEY: str = ""
@@ -48,6 +47,14 @@ class Settings(BaseSettings):
 
     # CORS
     CORS_ORIGINS: list[str] = ["http://localhost:3000"]
+
+    @property
+    def ASYNC_DATABASE_URL(self) -> str:
+        return _to_async_url(self.DATABASE_URL)
+
+    @property
+    def SYNC_DATABASE_URL(self) -> str:
+        return _to_sync_url(self.DATABASE_URL)
 
     model_config = {"env_file": ".env", "env_file_encoding": "utf-8"}
 
