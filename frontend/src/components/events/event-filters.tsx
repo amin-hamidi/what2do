@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback } from "react";
+import { useCallback, useRef } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { ChevronDown, X, Search } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -24,6 +24,7 @@ interface EventFiltersProps {
 export function EventFilters({ filters, className }: EventFiltersProps) {
   const router = useRouter();
   const searchParams = useSearchParams();
+  const searchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const setParam = useCallback(
     (key: string, value: string) => {
@@ -62,13 +63,9 @@ export function EventFilters({ filters, className }: EventFiltersProps) {
             placeholder="Search events..."
             defaultValue={searchValue}
             onChange={(e) => {
-              // Debounce search
               const val = e.target.value;
-              clearTimeout((window as Record<string, ReturnType<typeof setTimeout>>).__w2d_search);
-              (window as Record<string, ReturnType<typeof setTimeout>>).__w2d_search = setTimeout(
-                () => setParam("q", val),
-                400
-              );
+              if (searchTimer.current) clearTimeout(searchTimer.current);
+              searchTimer.current = setTimeout(() => setParam("q", val), 400);
             }}
             className="w-full pl-9 pr-3 py-2 rounded-lg bg-secondary/60 border border-glass-border text-sm placeholder:text-muted-foreground/60 outline-none focus:ring-1 focus:ring-primary/40 transition-all"
           />
